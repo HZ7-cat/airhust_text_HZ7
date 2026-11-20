@@ -1,2 +1,8 @@
 err_max: 0.15
 if_debug: 1
+circle_center_x: 1.0
+circle_center_y: 0.0
+circle_radius: 1.0
+circle_waypoints: 12
+circle_direction: 1
+

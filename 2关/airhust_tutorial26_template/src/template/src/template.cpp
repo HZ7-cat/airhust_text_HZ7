@@ -11,6 +11,13 @@ using std::endl;
 int mission_num = 0;
 float if_debug = 0;
 float err_max = 0.2;
+int circle_waypoints = 12;
+int circle_direction = 1;
+int circle_waypoint_index = 1;
+
+float circle_center_x = 1.0f;
+float circle_center_y = 0.0f;
+float circle_radius = 1.0f;
 void print_param()
 {
   std::cout << "=== 控制参数 ===" << std::endl;
@@ -49,6 +56,11 @@ int main(int argc, char **argv)
 
   nh.param<float>("err_max", err_max, 0);
   nh.param<float>("if_debug", if_debug, 0);
+  nh.param<float>("circle_center_x", circle_center_x, 1.0f);
+  nh.param<float>("circle_center_y", circle_center_y, 0.0f);
+  nh.param<float>("circle_radius", circle_radius, 1.0f);
+  nh.param<int>("circle_waypoints", circle_waypoints, 12);
+  nh.param<int>("circle_direction", circle_direction, 1);
   print_param();
 
   
@@ -154,15 +166,28 @@ int main(int argc, char **argv)
           last_request = ros::Time::now();
         }
         break;
-    
-      //机体系右移
       case 3:
-        if(current_position_cruise(0.0, -4.0, ALTITUDE, -1.57, err_max))
+        if(circle_waypoint_index <= circle_waypoints)
         {
-          mission_num = 4;
-          last_request = ros::Time::now();
-        }
-        break;
+          float theta = circle_direction * 2.0f * M_PI * circle_waypoint_index / circle_waypoints;
+          float target_x = circle_center_x + circle_radius * cos(theta);
+          float target_y = circle_center_y + circle_radius * sin(theta);
+          ROS_INFO("圆周航点 %d/%d: theta=%.2f, ""target=(%.2f, %.2f)",circle_waypoint_index,circle_waypoints,theta,target_x,target_y);
+        
+          if(mission_pos_cruise(target_x, target_y, ALTITUDE, 0.0f, err_max)){
+          ++circle_waypoint_index;
+          }
+        }else
+         {
+           ROS_INFO("完成一整圈，进入悬停");
+           circle_waypoint_index = 1;
+           mission_num = 4;
+           last_request = ros::Time::now();
+           }
+         
+
+            break;
+        
 
       //悬停
       case 4:
