@@ -54,13 +54,10 @@ def make_detector(family="25h9"):
 
     dictionary = None
     detector = None
-
-    """ ————————————————————————————填空—————————————————————————————————
-
-
-
+    dictionary = cv2.aruco.getPredefinedDictionary(FAMILIES[family])
+    params = cv2.aruco.DetectorParameters()
+    detector = cv2.aruco.ArucoDetector(dictionary, params)
     
-        ————————————————————————————填空————————————————————————————————— """
     return dictionary, detector
 
 
@@ -71,13 +68,18 @@ def detect_tags(image, dictionary, detector):
     corners 的顺序是左上、右上、右下、左下。
     """
     results = []
-    """ ————————————————————————————填空—————————————————————————————————
-    
-
-
-
-
-        ————————————————————————————填空————————————————————————————————— """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    corners, ids, rejected = detector.detectMarkers(gray)
+    if ids is None:
+        return results
+    for index, tag_id in enumerate(ids.flatten()):
+        points = np.array(corners[index], dtype=np.float32).reshape(4, 2)
+        cx, cy = np.mean(points, axis=0)
+        results.append({
+            "id": tag_id,
+            "center": (cx, cy),
+            "corners": points
+        })
     return results
 
 
