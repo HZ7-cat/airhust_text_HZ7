@@ -49,15 +49,13 @@ def decode_qr(image):
     detector = cv2.QRCodeDetector()
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     results = []
-
-    """ ————————————————————————————填空—————————————————————————————————
-
-
-
-
-
-        ————————————————————————————填空————————————————————————————————— """
-   
+    text, single_points, _ = detector.detectAndDecode(gray)
+    if text and single_points is not None:
+        qr_points = np.array(single_points).reshape(4, 2)
+        results.append({
+            "text": text,
+            "points": qr_points,
+        })
     return results
 
 
