@@ -3,12 +3,20 @@
 
 import os
 import re
+
 import cv2
 import numpy as np
+
 try:
     import pytesseract
 except ImportError:
     pytesseract = None
+
+
+# =========================
+# 颜色
+# =========================
+
 MIN_COLOR_AREA = 500
 
 COLOR_RANGES = {
@@ -16,6 +24,8 @@ COLOR_RANGES = {
     "green": ((0, 150, 0), (90, 255, 90)),
     "blue": ((150, 0, 0), (255, 90, 90)),
 }
+
+
 def color_mask(image, lower, upper):
     mask = cv2.inRange(
         image,
@@ -70,20 +80,29 @@ def recognize_color(image):
     height, width = image.shape[:2]
     cx, cy = width // 2, height // 2
 
-    patch = image[cy - 2:cy + 3, cx - 2:cx + 3]
-    b, g, r = patch.reshape(-1, 3).mean(axis=0)
+    # 使用 11×11 的中位数，减少边界混合和单像素噪声
+    half = 5
+    patch = image[
+        cy - half:cy + half + 1,
+        cx - half:cx + half + 1,
+    ]
 
-    if r > 150 and r - g > 60 and r - b > 60:
+    b, g, r = np.median(
+        patch.reshape(-1, 3),
+        axis=0,
+    )
+
+    # 不要求亮度一定大于 150，而是判断哪个通道明显占优
+    if r > 80 and r > 1.5 * g and r > 1.5 * b:
         return "red"
 
-    if g > 150 and g - r > 60 and g - b > 60:
+    if g > 80 and g > 1.5 * r and g > 1.5 * b:
         return "green"
 
-    if b > 150 and b - r > 60 and b - g > 60:
+    if b > 80 and b > 1.5 * r and b > 1.5 * g:
         return "blue"
 
     return None
-
 
 # =========================
 # 二维码
@@ -295,6 +314,108 @@ def recognize_ocr(image):
         "",
         raw.upper(),
     )
+
+    # 不在 vision_core 中依赖 rospy
     return text if text else None
 
 
+# =========================
+# YOLO
+# =========================
+
+_MODEL_CACHE = {}
+
+
+def load_model(weights):
+    if weights in _MODEL_CACHE:
+        return _MODEL_CACHE[weights]
+
+    from ultralytics import YOLO
+
+    if os.path.sep in weights and not os.path.exists(weights):
+        raise FileNotFoundError(
+            "找不到 YOLO 权重：" + weights
+        )
+
+    model = YOLO(weights)
+    _MODEL_CACHE[weights] = model
+    return model
+
+
+def detect_objects(
+    model,
+    image,
+    conf=0.25,
+    iou=0.45,
+):
+    results = model.predict(
+        source=image,
+        conf=conf,
+        iou=iou,
+        verbose=False,
+    )
+
+    if not results:
+        return []
+
+    result = results[0]
+    boxes = result.boxes
+
+    if boxes is None or len(boxes) == 0:
+        return []
+
+    height, width = image.shape[:2]
+
+    xyxy_values = boxes.xyxy.cpu().numpy()
+    class_values = boxes.cls.cpu().numpy()
+    confidence_values = boxes.conf.cpu().numpy()
+
+    detections = []
+
+    for xyxy, class_id, confidence in zip(
+        xyxy_values,
+        class_values,
+        confidence_values,
+    ):
+        x1, y1, x2, y2 = [
+            float(value) for value in xyxy
+        ]
+
+        detections.append(
+            {
+                "cls_id": int(class_id),
+                "cls_name": result.names[int(class_id)],
+                "conf": float(confidence),
+                "xyxy": (x1, y1, x2, y2),
+                "center": (
+                    (x1 + x2) / (2.0 * width),
+                    (y1 + y2) / (2.0 * height),
+                ),
+            }
+        )
+
+    return detections
+
+
+def recognize_logo(
+    image,
+    weights,
+    conf=0.5,
+    iou=0.45,
+):
+    model = load_model(weights)
+    detections = detect_objects(
+        model,
+        image,
+        conf=conf,
+        iou=iou,
+    )
+
+    if not detections:
+        return None
+
+    best = max(
+        detections,
+        key=lambda item: item["conf"],
+    )
+    return str(best["cls_name"])
